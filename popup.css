@@ -238,21 +238,33 @@ body {
   flex-direction: column;
 }
 
-.users-header {
+/* Bots Section */
+.bots-section {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 16px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  max-height: 200px;
+  display: flex;
+  flex-direction: column;
+}
+
+.users-header, .bots-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
 }
 
-.users-header h3 {
+.users-header h3, .bots-header h3 {
   font-size: 14px;
   font-weight: 600;
   color: #ffffff;
   margin: 0;
 }
 
-.users-controls {
+.users-controls, .bots-controls {
   display: flex;
   gap: 6px;
 }
@@ -281,7 +293,7 @@ body {
   transform: translateY(0);
 }
 
-.users-list {
+.users-list, .bots-list {
   flex: 1;
   overflow-y: auto;
   max-height: 120px;
@@ -291,7 +303,7 @@ body {
   align-content: flex-start;
 }
 
-.users-empty {
+.users-empty, .bots-empty {
   color: rgba(255, 255, 255, 0.6);
   font-size: 12px;
   font-style: italic;
@@ -300,7 +312,7 @@ body {
   padding: 20px 0;
 }
 
-.user-tag {
+.user-tag, .bot-tag {
   background: rgba(255, 255, 255, 0.15);
   color: #ffffff;
   padding: 4px 8px;
@@ -316,9 +328,18 @@ body {
   white-space: nowrap;
 }
 
-.user-tag:hover {
+.user-tag:hover, .bot-tag:hover {
   background: rgba(255, 255, 255, 0.25);
   transform: translateY(-1px);
+}
+
+.bot-tag {
+  background: rgba(255, 165, 0, 0.2);
+  border-color: rgba(255, 165, 0, 0.3);
+}
+
+.bot-tag:hover {
+  background: rgba(255, 165, 0, 0.3);
 }
 
 .user-tag.new {

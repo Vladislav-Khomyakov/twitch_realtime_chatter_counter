@@ -76,6 +76,10 @@ class BackgroundController {
           await this.restartSession();
           break;
           
+        case 'BOTS_LIST_UPDATE':
+          await this.updateBotsList(request.botsList);
+          break;
+          
         case 'GET_STATS':
           const stats = await this.getStats();
           sendResponse(stats);
@@ -161,12 +165,13 @@ class BackgroundController {
     try {
       console.log('Background: Очистка данных при смене страницы');
       
-      // Очищаем счетчик пользователей и время сессии
+      // Очищаем счетчик пользователей, время сессии и список ботов
       await chrome.storage.local.set({ 
         userCount: 0,
         sessionStartTime: null, // Не сбрасываем время сессии при смене страницы
         usersList: [],
-        sessionActive: false
+        sessionActive: false,
+        botsList: []
       });
       
       // Обновляем badge
@@ -176,7 +181,8 @@ class BackgroundController {
       this.notifyPopup({ 
         type: 'PAGE_CHANGE_CLEAR',
         userCount: 0,
-        usersList: []
+        usersList: [],
+        botsList: []
       });
       
     } catch (error) {
@@ -239,6 +245,25 @@ class BackgroundController {
     }
   }
 
+  async updateBotsList(botsList) {
+    try {
+      console.log('Background: Обновление списка ботов');
+      
+      await chrome.storage.local.set({ 
+        botsList: botsList,
+        botsUpdateTime: new Date().toISOString()
+      });
+      
+      this.notifyPopup({ 
+        type: 'BOTS_LIST_UPDATE',
+        botsList: botsList
+      });
+      
+    } catch (error) {
+      console.error('Ошибка обновления списка ботов:', error);
+    }
+  }
+
   async getStats() {
     try {
       const result = await chrome.storage.local.get([
@@ -248,7 +273,8 @@ class BackgroundController {
         'lastUpdate',
         'currentStreamer',
         'usersList',
-        'sessionActive'
+        'sessionActive',
+        'botsList'
       ]);
       
       return {
@@ -258,7 +284,8 @@ class BackgroundController {
         lastUpdate: result.lastUpdate,
         currentStreamer: result.currentStreamer,
         usersList: result.usersList || [],
-        sessionActive: result.sessionActive || false
+        sessionActive: result.sessionActive || false,
+        botsList: result.botsList || []
       };
     } catch (error) {
       console.error('Ошибка получения статистики:', error);

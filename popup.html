@@ -36,7 +36,11 @@
     <div class="controls-section">
       <button id="refreshButton" class="btn btn-primary">
         <span class="btn-icon">🔄</span>
-        Перезапустить анализ
+        Анализ
+      </button>
+      <button id="getBotsButton" class="btn btn-secondary">
+        <span class="btn-icon">🤖</span>
+        Получить список ботов
       </button>
     </div>
 
@@ -44,9 +48,6 @@
       <div class="users-header">
         <h3>Участники чата</h3>
         <div class="users-controls">
-          <button id="clearUsersButton" class="btn-small" title="Очистить список">
-            <span class="btn-icon">🗑️</span>
-          </button>
           <button id="exportUsersButton" class="btn-small" title="Экспорт списка">
             <span class="btn-icon">📋</span>
           </button>
@@ -54,6 +55,20 @@
       </div>
       <div class="users-list" id="usersList">
         <div class="users-empty">Список пуст</div>
+      </div>
+    </div>
+
+    <div class="bots-section">
+      <div class="bots-header">
+        <h3>Чат-боты</h3>
+        <div class="bots-controls">
+          <button id="exportBotsButton" class="btn-small" title="Экспорт списка ботов">
+            <span class="btn-icon">📋</span>
+          </button>
+        </div>
+      </div>
+      <div class="bots-list" id="botsList">
+        <div class="bots-empty">Список пуст</div>
       </div>
     </div>
 

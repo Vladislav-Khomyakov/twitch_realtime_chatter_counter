@@ -2,6 +2,7 @@
 class TwitchChatCounter {
   constructor() {
     this.uniqueUsers = new Set();
+    this.botsList = new Set(); // Список ботов для исключения из подсчета
     this.isActive = false;
     this.isEnabled = false; // Мониторинг выключен по умолчанию
     this.observer = null;
@@ -191,6 +192,12 @@ class TwitchChatCounter {
     // Очищаем имя пользователя от лишних символов
     const cleanUsername = username.replace(/[^\w\-_]/g, '').toLowerCase();
     if (cleanUsername && cleanUsername.length > 0) {
+      // Проверяем, является ли пользователь ботом
+      if (this.botsList.has(cleanUsername)) {
+        console.log(`Twitch Chat Counter: Пользователь ${cleanUsername} является ботом, исключаем из подсчета`);
+        return;
+      }
+      
       const isNewUser = !this.uniqueUsers.has(cleanUsername);
       this.uniqueUsers.add(cleanUsername);
       this.lastAddedUser = cleanUsername;
@@ -217,6 +224,7 @@ class TwitchChatCounter {
 
   resetCounter() {
     this.uniqueUsers.clear();
+    // НЕ очищаем список ботов при сбросе счетчика - он должен сохраняться
     chrome.runtime.sendMessage({
       type: 'COUNTER_RESET'
     });
@@ -247,10 +255,14 @@ class TwitchChatCounter {
     this.isEnabled = false;
     this.stopMonitoring();
     
+    // НЕ очищаем список ботов при выключении мониторинга - он должен сохраняться
+    
     // Отправляем команду остановки сессии
     chrome.runtime.sendMessage({
       type: 'SESSION_STOP'
     });
+    
+    // НЕ отправляем команду очистки списка ботов - список должен сохраняться
   }
 
   toggleMonitoring() {
@@ -296,7 +308,7 @@ class TwitchChatCounter {
       }
     }
 
-    console.log(`Twitch Chat Counter: Проанализировано ${processedMessages} сообщений, найдено ${this.uniqueUsers.size} уникальных пользователей`);
+    console.log(`Twitch Chat Counter: Проанализировано ${processedMessages} сообщений, найдено ${this.uniqueUsers.size} уникальных пользователей (боты исключены)`);
     
     // Отправляем обновленный счетчик и список пользователей
     chrome.runtime.sendMessage({
@@ -314,7 +326,7 @@ class TwitchChatCounter {
     // Останавливаем текущий мониторинг
     this.stopMonitoring();
     
-    // Очищаем счетчик пользователей
+    // Очищаем только счетчик пользователей, список ботов сохраняем
     this.uniqueUsers.clear();
     
     // Отправляем уведомление о сбросе
@@ -334,6 +346,112 @@ class TwitchChatCounter {
       // Запускаем мониторинг с анализом истории
       this.startMonitoring(0, true);
     }, 500);
+  }
+
+  getBotsList() {
+    console.log('Twitch Chat Counter: Поиск ботов в чате');
+    
+    // Очищаем предыдущий список ботов
+    this.botsList.clear();
+    
+    // Ищем блок с заголовком "Чат-боты"
+    const chatBotsSection = this.findChatBotsSection();
+    
+    if (chatBotsSection) {
+      console.log('Twitch Chat Counter: Найден блок чат-ботов');
+      
+      // Ищем все элементы chatter-list-item только внутри этого блока
+      const chatterListItems = chatBotsSection.querySelectorAll('.chatter-list-item');
+      
+      chatterListItems.forEach(item => {
+        // Ищем span с именем бота внутри кнопки
+        const botSpan = item.querySelector('span');
+        if (botSpan) {
+          const botName = botSpan.textContent?.trim();
+          if (botName && botName !== '') {
+            this.botsList.add(botName.toLowerCase());
+            console.log(`Twitch Chat Counter: Найден бот: ${botName}`);
+          }
+        }
+        
+        // Также проверяем aria-label кнопки для дополнительной информации
+        const button = item.querySelector('button');
+        if (button) {
+          const ariaLabel = button.getAttribute('aria-label');
+          if (ariaLabel) {
+            // Извлекаем имя бота из aria-label (например: "Подробнее о пользователе wzbot")
+            const match = ariaLabel.match(/пользователе\s+(\w+)/i);
+            if (match && match[1]) {
+              this.botsList.add(match[1].toLowerCase());
+              console.log(`Twitch Chat Counter: Найден бот из aria-label: ${match[1]}`);
+            }
+          }
+        }
+      });
+    } else {
+      console.log('Twitch Chat Counter: Блок чат-ботов не найден');
+    }
+
+    const botsArray = Array.from(this.botsList);
+    console.log(`Twitch Chat Counter: Найдено ${botsArray.length} ботов:`, botsArray);
+    
+    // Отправляем список ботов в background script
+    chrome.runtime.sendMessage({
+      type: 'BOTS_LIST_UPDATE',
+      botsList: botsArray
+    });
+
+    return botsArray;
+  }
+
+  findChatBotsSection() {
+    // Ищем все блоки с классами Layout-sc-1xcs6mc-0 iymPrH
+    const possibleContainers = document.querySelectorAll('.Layout-sc-1xcs6mc-0.iymPrH');
+    
+    for (const container of possibleContainers) {
+      // Проверяем, есть ли внутри этого контейнера заголовок "Чат-боты"
+      const title = container.querySelector('strong');
+      if (title && title.textContent?.trim() === 'Чат-боты') {
+        console.log('Twitch Chat Counter: Найден контейнер ботов с заголовком "Чат-боты"');
+        return container;
+      }
+    }
+    
+    console.log('Twitch Chat Counter: Блок чат-ботов не найден');
+    return null;
+  }
+
+  updateBotsListAndRecount() {
+    console.log('Twitch Chat Counter: Обновление списка ботов и пересчет участников');
+    
+    // Получаем новый список ботов
+    this.getBotsList();
+    
+    // Создаем новый Set для пользователей без ботов
+    const usersWithoutBots = new Set();
+    
+    // Пересчитываем пользователей, исключая ботов
+    this.uniqueUsers.forEach(username => {
+      if (!this.botsList.has(username)) {
+        usersWithoutBots.add(username);
+      } else {
+        console.log(`Twitch Chat Counter: Исключаем бота ${username} из подсчета`);
+      }
+    });
+    
+    // Обновляем список пользователей
+    this.uniqueUsers = usersWithoutBots;
+    
+    console.log(`Twitch Chat Counter: Пересчет завершен. Участников без ботов: ${this.uniqueUsers.size}`);
+    
+    // Отправляем обновленный счетчик
+    chrome.runtime.sendMessage({
+      type: 'USER_COUNT_UPDATE',
+      count: this.uniqueUsers.size,
+      username: null,
+      isNewUser: false,
+      usersList: Array.from(this.uniqueUsers)
+    });
   }
 }
 
@@ -397,6 +515,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
       sendResponse({ success: true });
       break;
+    case 'GET_BOTS_LIST':
+      if (chatCounter) {
+        const botsList = chatCounter.getBotsList();
+        sendResponse({ success: true, botsList: botsList });
+      } else {
+        sendResponse({ success: false, error: 'Chat counter not initialized' });
+      }
+      break;
+    case 'UPDATE_BOTS_AND_RECOUNT':
+      if (chatCounter) {
+        chatCounter.updateBotsListAndRecount();
+        sendResponse({ success: true });
+      } else {
+        sendResponse({ success: false, error: 'Chat counter not initialized' });
+      }
+      break;
   }
 });
 
@@ -404,10 +538,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 function clearPageData() {
   console.log('Twitch Chat Counter: Очистка данных при смене страницы');
   
+  // НЕ очищаем список ботов при смене страницы - он должен сохраняться между страницами
+  
   // Отправляем команду очистки в background script
   chrome.runtime.sendMessage({
     type: 'PAGE_CHANGE_CLEAR'
   });
+  
+  // НЕ отправляем команду очистки списка ботов - список должен сохраняться
 }
 
 // Функция для инициализации счетчика

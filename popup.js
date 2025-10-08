@@ -6,6 +6,7 @@ class PopupController {
     this.isEnabled = false;
     this.currentStreamer = null;
     this.usersList = [];
+    this.botsList = [];
     this.sessionStartTime = null;
     this.sessionActive = false;
     this.sessionTimer = null;
@@ -28,19 +29,23 @@ class PopupController {
       this.toggleMonitoring(e.target.checked);
     });
 
-    document.getElementById('clearUsersButton').addEventListener('click', () => {
-      this.clearUsersList();
-    });
-
     document.getElementById('exportUsersButton').addEventListener('click', () => {
       this.exportUsersList();
+    });
+
+    document.getElementById('getBotsButton').addEventListener('click', () => {
+      this.getBotsList();
+    });
+
+    document.getElementById('exportBotsButton').addEventListener('click', () => {
+      this.exportBotsList();
     });
   }
 
   async loadData() {
     try {
       // Получаем данные из storage
-      const result = await chrome.storage.local.get(['userCount', 'sessionStartTime', 'currentStreamer', 'usersList', 'sessionActive']);
+      const result = await chrome.storage.local.get(['userCount', 'sessionStartTime', 'currentStreamer', 'usersList', 'sessionActive', 'botsList']);
       
       if (result.userCount) {
         this.userCount = result.userCount;
@@ -55,6 +60,11 @@ class PopupController {
       if (result.usersList) {
         this.usersList = result.usersList;
         this.updateUsersList();
+      }
+
+      if (result.botsList) {
+        this.botsList = result.botsList;
+        this.updateBotsList();
       }
 
       this.sessionActive = result.sessionActive || false;
@@ -217,6 +227,65 @@ class PopupController {
     }
   }
 
+  async getBotsList() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      
+      if (tab && tab.url && tab.url.includes('twitch.tv')) {
+        // Отправляем команду поиска ботов в content script
+        await chrome.tabs.sendMessage(tab.id, { type: 'GET_BOTS_LIST' });
+        this.showNotification('Поиск ботов...', 'success');
+      } else {
+        this.showNotification('Откройте стрим на Twitch', 'error');
+      }
+    } catch (error) {
+      console.error('Ошибка получения списка ботов:', error);
+      this.showNotification('Ошибка получения списка ботов', 'error');
+    }
+  }
+
+  updateBotsList() {
+    const botsListElement = document.getElementById('botsList');
+    if (!botsListElement) return;
+
+    if (this.botsList.length === 0) {
+      botsListElement.innerHTML = '<div class="bots-empty">Список пуст</div>';
+      return;
+    }
+
+    // Сортируем ботов по алфавиту
+    const sortedBots = [...this.botsList].sort();
+    
+    botsListElement.innerHTML = sortedBots.map(botName => 
+      `<span class="bot-tag" title="${botName}">${botName}</span>`
+    ).join('');
+  }
+
+  exportBotsList() {
+    if (this.botsList.length === 0) {
+      this.showNotification('Список ботов пуст', 'error');
+      return;
+    }
+
+    try {
+      const sortedBots = [...this.botsList].sort();
+      const exportText = sortedBots.join('\n');
+      
+      // Создаем временный элемент для копирования
+      const textArea = document.createElement('textarea');
+      textArea.value = exportText;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      
+      this.showNotification(`Список из ${sortedBots.length} ботов скопирован`);
+    } catch (error) {
+      console.error('Ошибка экспорта ботов:', error);
+      this.showNotification('Ошибка экспорта ботов', 'error');
+    }
+  }
+
   updateSessionTime() {
     const sessionTimeElement = document.getElementById('sessionTime');
     if (!sessionTimeElement) return;
@@ -278,6 +347,12 @@ class PopupController {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       
       if (tab && tab.url && tab.url.includes('twitch.tv')) {
+        // Проверяем, включен ли мониторинг
+        if (!this.isEnabled) {
+          this.showNotification('Включите мониторинг чата для анализа', 'error');
+          return;
+        }
+        
         // Отправляем команду перезапуска мониторинга в content script
         await chrome.tabs.sendMessage(tab.id, { type: 'RESTART_MONITORING' });
         
@@ -388,11 +463,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (popup) {
       popup.userCount = 0;
       popup.usersList = [];
+      // НЕ очищаем список ботов при смене страницы - он должен сохраняться
       popup.sessionStartTime = null;
       popup.sessionActive = false;
       
       popup.updateUserCount();
       popup.updateUsersList();
+      // НЕ обновляем список ботов - он должен сохраняться
       popup.updateSessionTime();
     }
   } else if (request.type === 'SESSION_START') {
@@ -414,6 +491,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       popup.sessionStartTime = new Date(request.sessionStartTime);
       popup.sessionActive = true;
       popup.updateSessionTime();
+    }
+  } else if (request.type === 'BOTS_LIST_UPDATE') {
+    const popup = window.popupController;
+    if (popup && request.botsList) {
+      popup.botsList = request.botsList;
+      popup.updateBotsList();
+      
+      // Сохраняем список ботов в storage
+      chrome.storage.local.set({ botsList: request.botsList });
+      
+      popup.showNotification(`Найдено ${request.botsList.length} ботов`);
     }
   }
 });
