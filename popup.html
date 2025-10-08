@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Twitch Chat Counter</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Twitch Chat Counter</h1>
+      <div class="status-indicator" id="statusIndicator">
+        <span class="status-dot"></span>
+        <span class="status-text">Проверка...</span>
+      </div>
+    </div>
+
+    <div class="stats-section">
+      <div class="stat-card">
+        <div class="stat-number" id="userCount">0</div>
+        <div class="stat-label">Уникальных пользователей</div>
+      </div>
+    </div>
+
+    <div class="toggle-section">
+      <div class="toggle-container">
+        <span class="toggle-label">Мониторинг чата</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="monitoringToggle">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="controls-section">
+      <button id="resetButton" class="btn btn-secondary">
+        <span class="btn-icon">🔄</span>
+        Сбросить счетчик
+      </button>
+      <button id="refreshButton" class="btn btn-primary">
+        <span class="btn-icon">🔄</span>
+        Перезапустить анализ
+      </button>
+    </div>
+
+    <div class="users-section">
+      <div class="users-header">
+        <h3>Участники чата</h3>
+        <div class="users-controls">
+          <button id="clearUsersButton" class="btn-small" title="Очистить список">
+            <span class="btn-icon">🗑️</span>
+          </button>
+          <button id="exportUsersButton" class="btn-small" title="Экспорт списка">
+            <span class="btn-icon">📋</span>
+          </button>
+        </div>
+      </div>
+      <div class="users-list" id="usersList">
+        <div class="users-empty">Список пуст</div>
+      </div>
+    </div>
+
+    <div class="info-section">
+      <div class="info-item">
+        <span class="info-label">Текущий стрим:</span>
+        <span class="info-value" id="currentStream">Не определен</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Время работы:</span>
+        <span class="info-value" id="sessionTime">00:00:00</span>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p class="help-text">
+        Откройте стрим на Twitch для начала подсчета
+      </p>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
