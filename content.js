@@ -233,6 +233,12 @@ class TwitchChatCounter {
   enableMonitoring() {
     console.log('Twitch Chat Counter: Включение мониторинга');
     this.isEnabled = true;
+    
+    // Отправляем команду начала сессии
+    chrome.runtime.sendMessage({
+      type: 'SESSION_START'
+    });
+    
     this.startMonitoring(0, true); // Запускаем с анализом истории
   }
 
@@ -240,6 +246,11 @@ class TwitchChatCounter {
     console.log('Twitch Chat Counter: Отключение мониторинга');
     this.isEnabled = false;
     this.stopMonitoring();
+    
+    // Отправляем команду остановки сессии
+    chrome.runtime.sendMessage({
+      type: 'SESSION_STOP'
+    });
   }
 
   toggleMonitoring() {
@@ -310,6 +321,13 @@ class TwitchChatCounter {
     chrome.runtime.sendMessage({
       type: 'COUNTER_RESET'
     });
+    
+    // Если мониторинг был включен, перезапускаем сессию
+    if (this.isEnabled) {
+      chrome.runtime.sendMessage({
+        type: 'SESSION_RESTART'
+      });
+    }
     
     // Небольшая задержка перед перезапуском
     setTimeout(() => {
@@ -382,6 +400,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
+// Функция для очистки данных при смене страницы
+function clearPageData() {
+  console.log('Twitch Chat Counter: Очистка данных при смене страницы');
+  
+  // Отправляем команду очистки в background script
+  chrome.runtime.sendMessage({
+    type: 'PAGE_CHANGE_CLEAR'
+  });
+}
+
 // Функция для инициализации счетчика
 function initializeChatCounter() {
   if (window.location.hostname === 'www.twitch.tv') {
@@ -402,6 +430,9 @@ const urlObserver = new MutationObserver(() => {
   if (window.location.href !== currentUrl) {
     console.log('Twitch Chat Counter: Обнаружена смена страницы');
     currentUrl = window.location.href;
+    
+    // Очищаем данные при смене страницы
+    clearPageData();
     
     // Останавливаем текущий мониторинг
     if (chatCounter) {
@@ -424,6 +455,10 @@ urlObserver.observe(document.body, {
 // Дополнительная проверка при изменении URL через history API
 window.addEventListener('popstate', () => {
   console.log('Twitch Chat Counter: Обнаружена навигация через history API');
+  
+  // Очищаем данные при смене страницы
+  clearPageData();
+  
   setTimeout(() => {
     if (chatCounter) {
       chatCounter.stopMonitoring();

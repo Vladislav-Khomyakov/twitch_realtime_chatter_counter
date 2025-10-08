@@ -60,6 +60,22 @@ class BackgroundController {
           await this.updateStreamer(request.streamer);
           break;
           
+        case 'PAGE_CHANGE_CLEAR':
+          await this.clearPageData();
+          break;
+          
+        case 'SESSION_START':
+          await this.startSession();
+          break;
+          
+        case 'SESSION_STOP':
+          await this.stopSession();
+          break;
+          
+        case 'SESSION_RESTART':
+          await this.restartSession();
+          break;
+          
         case 'GET_STATS':
           const stats = await this.getStats();
           sendResponse(stats);
@@ -141,6 +157,88 @@ class BackgroundController {
     }
   }
 
+  async clearPageData() {
+    try {
+      console.log('Background: Очистка данных при смене страницы');
+      
+      // Очищаем счетчик пользователей и время сессии
+      await chrome.storage.local.set({ 
+        userCount: 0,
+        sessionStartTime: null, // Не сбрасываем время сессии при смене страницы
+        usersList: [],
+        sessionActive: false
+      });
+      
+      // Обновляем badge
+      this.updateBadge(0);
+      
+      // Уведомляем popup об очистке
+      this.notifyPopup({ 
+        type: 'PAGE_CHANGE_CLEAR',
+        userCount: 0,
+        usersList: []
+      });
+      
+    } catch (error) {
+      console.error('Ошибка очистки данных при смене страницы:', error);
+    }
+  }
+
+  async startSession() {
+    try {
+      console.log('Background: Начало сессии мониторинга');
+      
+      await chrome.storage.local.set({ 
+        sessionStartTime: new Date().toISOString(),
+        sessionActive: true
+      });
+      
+      this.notifyPopup({ 
+        type: 'SESSION_START',
+        sessionStartTime: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      console.error('Ошибка начала сессии:', error);
+    }
+  }
+
+  async stopSession() {
+    try {
+      console.log('Background: Остановка сессии мониторинга');
+      
+      await chrome.storage.local.set({ 
+        sessionActive: false
+      });
+      
+      this.notifyPopup({ 
+        type: 'SESSION_STOP'
+      });
+      
+    } catch (error) {
+      console.error('Ошибка остановки сессии:', error);
+    }
+  }
+
+  async restartSession() {
+    try {
+      console.log('Background: Перезапуск сессии мониторинга');
+      
+      await chrome.storage.local.set({ 
+        sessionStartTime: new Date().toISOString(),
+        sessionActive: true
+      });
+      
+      this.notifyPopup({ 
+        type: 'SESSION_RESTART',
+        sessionStartTime: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      console.error('Ошибка перезапуска сессии:', error);
+    }
+  }
+
   async getStats() {
     try {
       const result = await chrome.storage.local.get([
@@ -149,7 +247,8 @@ class BackgroundController {
         'lastUser', 
         'lastUpdate',
         'currentStreamer',
-        'usersList'
+        'usersList',
+        'sessionActive'
       ]);
       
       return {
@@ -158,7 +257,8 @@ class BackgroundController {
         lastUser: result.lastUser,
         lastUpdate: result.lastUpdate,
         currentStreamer: result.currentStreamer,
-        usersList: result.usersList || []
+        usersList: result.usersList || [],
+        sessionActive: result.sessionActive || false
       };
     } catch (error) {
       console.error('Ошибка получения статистики:', error);

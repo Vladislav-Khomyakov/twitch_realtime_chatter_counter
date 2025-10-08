@@ -7,6 +7,7 @@ class PopupController {
     this.currentStreamer = null;
     this.usersList = [];
     this.sessionStartTime = null;
+    this.sessionActive = false;
     this.sessionTimer = null;
     this.init();
   }
@@ -19,10 +20,6 @@ class PopupController {
   }
 
   bindEvents() {
-    document.getElementById('resetButton').addEventListener('click', () => {
-      this.resetCounter();
-    });
-
     document.getElementById('refreshButton').addEventListener('click', () => {
       this.refreshData();
     });
@@ -43,7 +40,7 @@ class PopupController {
   async loadData() {
     try {
       // Получаем данные из storage
-      const result = await chrome.storage.local.get(['userCount', 'sessionStartTime', 'currentStreamer', 'usersList']);
+      const result = await chrome.storage.local.get(['userCount', 'sessionStartTime', 'currentStreamer', 'usersList', 'sessionActive']);
       
       if (result.userCount) {
         this.userCount = result.userCount;
@@ -60,11 +57,12 @@ class PopupController {
         this.updateUsersList();
       }
 
-      if (result.sessionStartTime) {
+      this.sessionActive = result.sessionActive || false;
+      
+      if (result.sessionStartTime && this.sessionActive) {
         this.sessionStartTime = new Date(result.sessionStartTime);
       } else {
-        this.sessionStartTime = new Date();
-        await chrome.storage.local.set({ sessionStartTime: this.sessionStartTime.toISOString() });
+        this.sessionStartTime = null;
       }
 
       this.updateSessionTime();
@@ -220,7 +218,13 @@ class PopupController {
   }
 
   updateSessionTime() {
-    if (!this.sessionStartTime) return;
+    const sessionTimeElement = document.getElementById('sessionTime');
+    if (!sessionTimeElement) return;
+
+    if (!this.sessionStartTime || !this.sessionActive) {
+      sessionTimeElement.textContent = '00:00:00';
+      return;
+    }
 
     const now = new Date();
     const diff = now - this.sessionStartTime;
@@ -229,7 +233,7 @@ class PopupController {
     const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
     const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    document.getElementById('sessionTime').textContent = timeString;
+    sessionTimeElement.textContent = timeString;
   }
 
   startSessionTimer() {
@@ -238,33 +242,6 @@ class PopupController {
     }, 1000);
   }
 
-  async resetCounter() {
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      
-      if (tab && tab.url && tab.url.includes('twitch.tv')) {
-        // Отправляем команду сброса в content script
-        await chrome.tabs.sendMessage(tab.id, { type: 'RESET_COUNTER' });
-      }
-
-      this.userCount = 0;
-      this.sessionStartTime = new Date();
-      
-      await chrome.storage.local.set({ 
-        userCount: 0,
-        sessionStartTime: this.sessionStartTime.toISOString()
-      });
-
-      this.updateUserCount();
-      this.updateSessionTime();
-      
-      // Показываем уведомление
-      this.showNotification('Счетчик сброшен');
-    } catch (error) {
-      console.error('Ошибка сброса счетчика:', error);
-      this.showNotification('Ошибка сброса', 'error');
-    }
-  }
 
   async toggleMonitoring(enabled) {
     try {
@@ -405,6 +382,38 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (popup) {
       popup.usersList = [];
       popup.updateUsersList();
+    }
+  } else if (request.type === 'PAGE_CHANGE_CLEAR') {
+    const popup = window.popupController;
+    if (popup) {
+      popup.userCount = 0;
+      popup.usersList = [];
+      popup.sessionStartTime = null;
+      popup.sessionActive = false;
+      
+      popup.updateUserCount();
+      popup.updateUsersList();
+      popup.updateSessionTime();
+    }
+  } else if (request.type === 'SESSION_START') {
+    const popup = window.popupController;
+    if (popup && request.sessionStartTime) {
+      popup.sessionStartTime = new Date(request.sessionStartTime);
+      popup.sessionActive = true;
+      popup.updateSessionTime();
+    }
+  } else if (request.type === 'SESSION_STOP') {
+    const popup = window.popupController;
+    if (popup) {
+      popup.sessionActive = false;
+      popup.updateSessionTime();
+    }
+  } else if (request.type === 'SESSION_RESTART') {
+    const popup = window.popupController;
+    if (popup && request.sessionStartTime) {
+      popup.sessionStartTime = new Date(request.sessionStartTime);
+      popup.sessionActive = true;
+      popup.updateSessionTime();
     }
   }
 });
