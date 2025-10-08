@@ -23,6 +23,27 @@ class TwitchChatCounter {
     }
   }
 
+  // Безопасный метод для отправки сообщений в background script
+  sendMessageToBackground(message) {
+    try {
+      // Проверяем доступность chrome.runtime
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage(message).catch((error) => {
+          // Игнорируем ошибки "Extension context invalidated"
+          if (error.message && error.message.includes('Extension context invalidated')) {
+            console.log('Content: Расширение было перезагружено, пропускаем сообщение');
+            return;
+          }
+          console.error('Content: Ошибка отправки сообщения:', error);
+        });
+      } else {
+        console.log('Content: chrome.runtime недоступен');
+      }
+    } catch (error) {
+      console.error('Content: Критическая ошибка при отправке сообщения:', error);
+    }
+  }
+
   detectCurrentStreamer() {
     // Различные способы определения стримера
     const selectors = [
@@ -61,7 +82,7 @@ class TwitchChatCounter {
     console.log('Twitch Chat Counter: Текущий стример:', this.currentStreamer);
     
     // Отправляем информацию о стримере
-    chrome.runtime.sendMessage({
+    this.sendMessageToBackground({
       type: 'STREAMER_UPDATE',
       streamer: this.currentStreamer
     });
@@ -203,7 +224,7 @@ class TwitchChatCounter {
       this.lastAddedUser = cleanUsername;
       
       // Отправляем обновление в background script
-      chrome.runtime.sendMessage({
+      this.sendMessageToBackground({
         type: 'USER_COUNT_UPDATE',
         count: this.uniqueUsers.size,
         username: cleanUsername,
@@ -225,7 +246,7 @@ class TwitchChatCounter {
   resetCounter() {
     this.uniqueUsers.clear();
     // НЕ очищаем список ботов при сбросе счетчика - он должен сохраняться
-    chrome.runtime.sendMessage({
+    this.sendMessageToBackground({
       type: 'COUNTER_RESET'
     });
   }
@@ -243,7 +264,7 @@ class TwitchChatCounter {
     this.isEnabled = true;
     
     // Отправляем команду начала сессии
-    chrome.runtime.sendMessage({
+    this.sendMessageToBackground({
       type: 'SESSION_START'
     });
     
@@ -258,7 +279,7 @@ class TwitchChatCounter {
     // НЕ очищаем список ботов при выключении мониторинга - он должен сохраняться
     
     // Отправляем команду остановки сессии
-    chrome.runtime.sendMessage({
+    this.sendMessageToBackground({
       type: 'SESSION_STOP'
     });
     
@@ -311,7 +332,7 @@ class TwitchChatCounter {
     console.log(`Twitch Chat Counter: Проанализировано ${processedMessages} сообщений, найдено ${this.uniqueUsers.size} уникальных пользователей (боты исключены)`);
     
     // Отправляем обновленный счетчик и список пользователей
-    chrome.runtime.sendMessage({
+    this.sendMessageToBackground({
       type: 'USER_COUNT_UPDATE',
       count: this.uniqueUsers.size,
       username: null,
@@ -330,13 +351,13 @@ class TwitchChatCounter {
     this.uniqueUsers.clear();
     
     // Отправляем уведомление о сбросе
-    chrome.runtime.sendMessage({
+    this.sendMessageToBackground({
       type: 'COUNTER_RESET'
     });
     
     // Если мониторинг был включен, перезапускаем сессию
     if (this.isEnabled) {
-      chrome.runtime.sendMessage({
+      this.sendMessageToBackground({
         type: 'SESSION_RESTART'
       });
     }
@@ -396,7 +417,7 @@ class TwitchChatCounter {
     console.log(`Twitch Chat Counter: Найдено ${botsArray.length} ботов:`, botsArray);
     
     // Отправляем список ботов в background script
-    chrome.runtime.sendMessage({
+    this.sendMessageToBackground({
       type: 'BOTS_LIST_UPDATE',
       botsList: botsArray
     });
@@ -445,7 +466,7 @@ class TwitchChatCounter {
     console.log(`Twitch Chat Counter: Пересчет завершен. Участников без ботов: ${this.uniqueUsers.size}`);
     
     // Отправляем обновленный счетчик
-    chrome.runtime.sendMessage({
+    this.sendMessageToBackground({
       type: 'USER_COUNT_UPDATE',
       count: this.uniqueUsers.size,
       username: null,
@@ -467,7 +488,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         isActive: chatCounter ? chatCounter.isActive : false,
         isEnabled: chatCounter ? chatCounter.isEnabled : false,
         streamer: chatCounter ? chatCounter.currentStreamer : null,
-        usersList: chatCounter ? Array.from(chatCounter.uniqueUsers) : []
+        usersList: chatCounter ? Array.from(chatCounter.uniqueUsers) : [],
+        botsList: chatCounter ? Array.from(chatCounter.botsList) : []
       });
       break;
     case 'RESET_COUNTER':
@@ -535,13 +557,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // Функция для очистки данных при смене страницы
+// Глобальная функция для безопасной отправки сообщений в background script
+function sendMessageToBackground(message) {
+  try {
+    // Проверяем доступность chrome.runtime
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+      chrome.runtime.sendMessage(message).catch((error) => {
+        // Игнорируем ошибки "Extension context invalidated"
+        if (error.message && error.message.includes('Extension context invalidated')) {
+          console.log('Content: Расширение было перезагружено, пропускаем сообщение');
+          return;
+        }
+        console.error('Content: Ошибка отправки сообщения:', error);
+      });
+    } else {
+      console.log('Content: chrome.runtime недоступен');
+    }
+  } catch (error) {
+    console.error('Content: Критическая ошибка при отправке сообщения:', error);
+  }
+}
+
 function clearPageData() {
   console.log('Twitch Chat Counter: Очистка данных при смене страницы');
   
   // НЕ очищаем список ботов при смене страницы - он должен сохраняться между страницами
+  // Список ботов остается в chatCounter.botsList
   
   // Отправляем команду очистки в background script
-  chrome.runtime.sendMessage({
+  sendMessageToBackground({
     type: 'PAGE_CHANGE_CLEAR'
   });
   
@@ -552,7 +596,17 @@ function clearPageData() {
 function initializeChatCounter() {
   if (window.location.hostname === 'www.twitch.tv') {
     console.log('Twitch Chat Counter: Инициализация на странице Twitch');
+    
+    // Сохраняем список ботов из предыдущего экземпляра
+    const previousBotsList = chatCounter ? chatCounter.botsList : new Set();
+    
     chatCounter = new TwitchChatCounter();
+    
+    // Восстанавливаем список ботов
+    if (previousBotsList.size > 0) {
+      chatCounter.botsList = previousBotsList;
+      console.log(`Twitch Chat Counter: Восстановлен список из ${previousBotsList.size} ботов`);
+    }
     
     // Мониторинг выключен по умолчанию - пользователь должен включить его вручную
     console.log('Twitch Chat Counter: Мониторинг выключен по умолчанию');

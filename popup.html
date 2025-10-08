@@ -16,10 +16,28 @@
       </div>
     </div>
 
+    <div class="tabs-section" id="tabsSection">
+      <div class="tabs-header">
+        <h3>Вкладки Twitch</h3>
+        <div class="tabs-controls">
+          <button id="refreshTabsButton" class="btn-small" title="Обновить список вкладок">
+            <span class="btn-icon">🔄</span>
+          </button>
+        </div>
+      </div>
+      <div class="tabs-list" id="tabsList">
+        <!-- Вкладки будут добавлены динамически -->
+      </div>
+    </div>
+
     <div class="stats-section">
       <div class="stat-card">
         <div class="stat-number" id="userCount">0</div>
         <div class="stat-label">Уникальных пользователей</div>
+      </div>
+      <div class="stat-card" id="globalStatsCard" style="display: none;">
+        <div class="stat-number" id="globalUserCount">0</div>
+        <div class="stat-label">Всего пользователей</div>
       </div>
     </div>
 

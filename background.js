@@ -1,12 +1,14 @@
 // Twitch Chat Counter - Background Script
 class BackgroundController {
   constructor() {
+    this.tabData = new Map(); // Хранилище данных по вкладкам
     this.init();
   }
 
   init() {
     this.setupMessageListener();
     this.setupInstallListener();
+    this.setupTabListener();
     this.loadInitialData();
   }
 
@@ -25,6 +27,72 @@ class BackgroundController {
         this.handleUpdate(details.previousVersion);
       }
     });
+  }
+
+  setupTabListener() {
+    // Очищаем данные при закрытии вкладки
+    chrome.tabs.onRemoved.addListener((tabId) => {
+      this.cleanupTabData(tabId);
+    });
+
+    // Очищаем данные при обновлении вкладки
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+      if (changeInfo.status === 'loading' && changeInfo.url) {
+        // Если URL изменился, очищаем данные вкладки
+        this.cleanupTabData(tabId);
+      }
+    });
+  }
+
+  cleanupTabData(tabId) {
+    if (this.tabData.has(tabId)) {
+      console.log(`Background: Очистка данных для вкладки ${tabId}`);
+      this.tabData.delete(tabId);
+      
+      // Обновляем общую статистику
+      this.updateGlobalStats();
+    }
+  }
+
+  getTabData(tabId) {
+    if (!this.tabData.has(tabId)) {
+      this.tabData.set(tabId, {
+        userCount: 0,
+        usersList: [],
+        sessionStartTime: null,
+        sessionActive: false,
+        currentStreamer: null,
+        botsList: [], // Список ботов уникален для каждой вкладки
+        lastUser: null,
+        lastUpdate: null
+      });
+    }
+    return this.tabData.get(tabId);
+  }
+
+  async updateGlobalStats() {
+    // Подсчитываем общую статистику по всем вкладкам
+    let totalUsers = 0;
+    let allUsers = new Set();
+    let activeTabs = 0;
+
+    for (const [tabId, data] of this.tabData) {
+      if (data.sessionActive) {
+        activeTabs++;
+        totalUsers += data.userCount;
+        data.usersList.forEach(user => allUsers.add(user));
+      }
+    }
+
+    // Сохраняем глобальную статистику
+    await chrome.storage.local.set({
+      globalUserCount: totalUsers,
+      globalUsersList: Array.from(allUsers),
+      activeTabsCount: activeTabs
+    });
+
+    // Обновляем badge с общим количеством
+    this.updateBadge(totalUsers);
   }
 
   async loadInitialData() {
@@ -47,42 +115,65 @@ class BackgroundController {
 
   async handleMessage(request, sender, sendResponse) {
     try {
+      const tabId = sender.tab?.id;
+      if (!tabId) {
+        // Если сообщение приходит не из content script (например, из popup), 
+        // обрабатываем его по-другому
+        if (request.type === 'GET_ALL_TABS_STATS') {
+          const allStats = await this.getAllTabsStats();
+          sendResponse(allStats);
+          return;
+        }
+        if (request.type === 'GET_STATS' && request.tabId) {
+          const stats = await this.getStats(request.tabId);
+          sendResponse(stats);
+          return;
+        }
+        console.log('Background: Сообщение не из content script, пропускаем');
+        return;
+      }
+
       switch (request.type) {
         case 'USER_COUNT_UPDATE':
-          await this.updateUserCount(request.count, request.username, request.isNewUser, request.usersList);
+          await this.updateUserCount(tabId, request.count, request.username, request.isNewUser, request.usersList);
           break;
           
         case 'COUNTER_RESET':
-          await this.resetCounter();
+          await this.resetCounter(tabId);
           break;
           
         case 'STREAMER_UPDATE':
-          await this.updateStreamer(request.streamer);
+          await this.updateStreamer(tabId, request.streamer);
           break;
           
         case 'PAGE_CHANGE_CLEAR':
-          await this.clearPageData();
+          await this.clearPageData(tabId);
           break;
           
         case 'SESSION_START':
-          await this.startSession();
+          await this.startSession(tabId);
           break;
           
         case 'SESSION_STOP':
-          await this.stopSession();
+          await this.stopSession(tabId);
           break;
           
         case 'SESSION_RESTART':
-          await this.restartSession();
+          await this.restartSession(tabId);
           break;
           
         case 'BOTS_LIST_UPDATE':
-          await this.updateBotsList(request.botsList);
+          await this.updateBotsList(tabId, request.botsList);
           break;
           
         case 'GET_STATS':
-          const stats = await this.getStats();
+          const stats = await this.getStats(tabId);
           sendResponse(stats);
+          break;
+
+        case 'GET_ALL_TABS_STATS':
+          const allStats = await this.getAllTabsStats();
+          sendResponse(allStats);
           break;
           
         default:
@@ -94,95 +185,95 @@ class BackgroundController {
     }
   }
 
-  async updateUserCount(count, username, isNewUser, usersList) {
+  async updateUserCount(tabId, count, username, isNewUser, usersList) {
     try {
-      // Обновляем счетчик
-      await chrome.storage.local.set({ userCount: count });
+      const tabData = this.getTabData(tabId);
       
-      // Сохраняем список пользователей
+      // Обновляем данные вкладки
+      tabData.userCount = count;
       if (usersList) {
-        await chrome.storage.local.set({ usersList: usersList });
+        tabData.usersList = usersList;
       }
-      
-      // Сохраняем последнего пользователя
       if (username) {
-        await chrome.storage.local.set({ 
-          lastUser: username,
-          lastUpdate: new Date().toISOString()
-        });
+        tabData.lastUser = username;
+        tabData.lastUpdate = new Date().toISOString();
       }
+
+      // Обновляем глобальную статистику
+      await this.updateGlobalStats();
 
       // Отправляем обновление в popup (если открыт)
       this.notifyPopup({ 
         type: 'COUNT_UPDATE', 
+        tabId: tabId,
         count: count,
         username: username,
         isNewUser: isNewUser,
         usersList: usersList
       });
       
-      // Обновляем badge
-      this.updateBadge(count);
-      
     } catch (error) {
       console.error('Ошибка обновления счетчика:', error);
     }
   }
 
-  async resetCounter() {
+  async resetCounter(tabId) {
     try {
-      await chrome.storage.local.set({ 
-        userCount: 0,
-        sessionStartTime: new Date().toISOString(),
-        lastUser: null,
-        lastUpdate: null,
-        usersList: []
-      });
+      const tabData = this.getTabData(tabId);
       
-      this.updateBadge(0);
-      this.notifyPopup({ type: 'COUNTER_RESET' });
+      // Сбрасываем данные вкладки
+      tabData.userCount = 0;
+      tabData.sessionStartTime = new Date().toISOString();
+      tabData.lastUser = null;
+      tabData.lastUpdate = null;
+      tabData.usersList = [];
+      
+      // Обновляем глобальную статистику
+      await this.updateGlobalStats();
+      
+      this.notifyPopup({ type: 'COUNTER_RESET', tabId: tabId });
       
     } catch (error) {
       console.error('Ошибка сброса счетчика:', error);
     }
   }
 
-  async updateStreamer(streamer) {
+  async updateStreamer(tabId, streamer) {
     try {
-      await chrome.storage.local.set({ 
-        currentStreamer: streamer,
-        streamerUpdate: new Date().toISOString()
-      });
+      const tabData = this.getTabData(tabId);
       
-      this.notifyPopup({ type: 'STREAMER_UPDATE', streamer: streamer });
+      // Обновляем данные вкладки
+      tabData.currentStreamer = streamer;
+      
+      this.notifyPopup({ type: 'STREAMER_UPDATE', tabId: tabId, streamer: streamer });
       
     } catch (error) {
       console.error('Ошибка обновления стримера:', error);
     }
   }
 
-  async clearPageData() {
+  async clearPageData(tabId) {
     try {
-      console.log('Background: Очистка данных при смене страницы');
+      console.log(`Background: Очистка данных при смене страницы для вкладки ${tabId}`);
       
-      // Очищаем счетчик пользователей, время сессии и список ботов
-      await chrome.storage.local.set({ 
-        userCount: 0,
-        sessionStartTime: null, // Не сбрасываем время сессии при смене страницы
-        usersList: [],
-        sessionActive: false,
-        botsList: []
-      });
+      const tabData = this.getTabData(tabId);
       
-      // Обновляем badge
-      this.updateBadge(0);
+      // Очищаем данные вкладки, но сохраняем список ботов
+      tabData.userCount = 0;
+      tabData.usersList = [];
+      tabData.sessionActive = false;
+      // НЕ очищаем tabData.botsList - список ботов должен сохраняться между страницами
       
-      // Уведомляем popup об очистке
+      // Обновляем глобальную статистику
+      await this.updateGlobalStats();
+      
+      // Уведомляем popup об очистке, но сохраняем список ботов
       this.notifyPopup({ 
         type: 'PAGE_CHANGE_CLEAR',
+        tabId: tabId,
         userCount: 0,
         usersList: [],
-        botsList: []
+        botsList: tabData.botsList // Сохраняем список ботов
       });
       
     } catch (error) {
@@ -190,17 +281,22 @@ class BackgroundController {
     }
   }
 
-  async startSession() {
+  async startSession(tabId) {
     try {
-      console.log('Background: Начало сессии мониторинга');
+      console.log(`Background: Начало сессии мониторинга для вкладки ${tabId}`);
       
-      await chrome.storage.local.set({ 
-        sessionStartTime: new Date().toISOString(),
-        sessionActive: true
-      });
+      const tabData = this.getTabData(tabId);
+      
+      // Обновляем данные вкладки
+      tabData.sessionStartTime = new Date().toISOString();
+      tabData.sessionActive = true;
+      
+      // Обновляем глобальную статистику
+      await this.updateGlobalStats();
       
       this.notifyPopup({ 
         type: 'SESSION_START',
+        tabId: tabId,
         sessionStartTime: new Date().toISOString()
       });
       
@@ -209,16 +305,21 @@ class BackgroundController {
     }
   }
 
-  async stopSession() {
+  async stopSession(tabId) {
     try {
-      console.log('Background: Остановка сессии мониторинга');
+      console.log(`Background: Остановка сессии мониторинга для вкладки ${tabId}`);
       
-      await chrome.storage.local.set({ 
-        sessionActive: false
-      });
+      const tabData = this.getTabData(tabId);
+      
+      // Обновляем данные вкладки
+      tabData.sessionActive = false;
+      
+      // Обновляем глобальную статистику
+      await this.updateGlobalStats();
       
       this.notifyPopup({ 
-        type: 'SESSION_STOP'
+        type: 'SESSION_STOP',
+        tabId: tabId
       });
       
     } catch (error) {
@@ -226,17 +327,22 @@ class BackgroundController {
     }
   }
 
-  async restartSession() {
+  async restartSession(tabId) {
     try {
-      console.log('Background: Перезапуск сессии мониторинга');
+      console.log(`Background: Перезапуск сессии мониторинга для вкладки ${tabId}`);
       
-      await chrome.storage.local.set({ 
-        sessionStartTime: new Date().toISOString(),
-        sessionActive: true
-      });
+      const tabData = this.getTabData(tabId);
+      
+      // Обновляем данные вкладки
+      tabData.sessionStartTime = new Date().toISOString();
+      tabData.sessionActive = true;
+      
+      // Обновляем глобальную статистику
+      await this.updateGlobalStats();
       
       this.notifyPopup({ 
         type: 'SESSION_RESTART',
+        tabId: tabId,
         sessionStartTime: new Date().toISOString()
       });
       
@@ -245,17 +351,18 @@ class BackgroundController {
     }
   }
 
-  async updateBotsList(botsList) {
+  async updateBotsList(tabId, botsList) {
     try {
-      console.log('Background: Обновление списка ботов');
+      console.log(`Background: Обновление списка ботов для вкладки ${tabId}`);
       
-      await chrome.storage.local.set({ 
-        botsList: botsList,
-        botsUpdateTime: new Date().toISOString()
-      });
+      const tabData = this.getTabData(tabId);
+      
+      // Обновляем данные вкладки
+      tabData.botsList = botsList;
       
       this.notifyPopup({ 
         type: 'BOTS_LIST_UPDATE',
+        tabId: tabId,
         botsList: botsList
       });
       
@@ -264,31 +371,67 @@ class BackgroundController {
     }
   }
 
-  async getStats() {
+  async getStats(tabId) {
     try {
-      const result = await chrome.storage.local.get([
-        'userCount', 
-        'sessionStartTime', 
-        'lastUser', 
-        'lastUpdate',
-        'currentStreamer',
-        'usersList',
-        'sessionActive',
-        'botsList'
-      ]);
+      const tabData = this.getTabData(tabId);
       
       return {
-        userCount: result.userCount || 0,
-        sessionStartTime: result.sessionStartTime,
-        lastUser: result.lastUser,
-        lastUpdate: result.lastUpdate,
-        currentStreamer: result.currentStreamer,
-        usersList: result.usersList || [],
-        sessionActive: result.sessionActive || false,
-        botsList: result.botsList || []
+        tabId: tabId,
+        userCount: tabData.userCount || 0,
+        sessionStartTime: tabData.sessionStartTime,
+        lastUser: tabData.lastUser,
+        lastUpdate: tabData.lastUpdate,
+        currentStreamer: tabData.currentStreamer,
+        usersList: tabData.usersList || [],
+        sessionActive: tabData.sessionActive || false,
+        botsList: tabData.botsList || []
       };
     } catch (error) {
       console.error('Ошибка получения статистики:', error);
+      return { error: error.message };
+    }
+  }
+
+  async getAllTabsStats() {
+    try {
+      console.log('Background: getAllTabsStats вызван, количество вкладок в tabData:', this.tabData.size);
+      const allTabs = [];
+      
+      for (const [tabId, data] of this.tabData) {
+        console.log(`Background: Обрабатываем вкладку ${tabId}:`, data);
+        allTabs.push({
+          tabId: tabId,
+          userCount: data.userCount || 0,
+          sessionStartTime: data.sessionStartTime,
+          lastUser: data.lastUser,
+          lastUpdate: data.lastUpdate,
+          currentStreamer: data.currentStreamer,
+          usersList: data.usersList || [],
+          sessionActive: data.sessionActive || false,
+          botsList: data.botsList || []
+        });
+      }
+      
+      // Получаем глобальную статистику
+      const globalStats = await chrome.storage.local.get([
+        'globalUserCount',
+        'globalUsersList',
+        'activeTabsCount'
+      ]);
+      
+      const result = {
+        tabs: allTabs,
+        global: {
+          userCount: globalStats.globalUserCount || 0,
+          usersList: globalStats.globalUsersList || [],
+          activeTabsCount: globalStats.activeTabsCount || 0
+        }
+      };
+      
+      console.log('Background: Возвращаем статистику:', result);
+      return result;
+    } catch (error) {
+      console.error('Ошибка получения статистики всех вкладок:', error);
       return { error: error.message };
     }
   }
@@ -300,6 +443,21 @@ class BackgroundController {
       chrome.action.setBadgeBackgroundColor({ color: '#9146ff' }); // Twitch purple
     } catch (error) {
       console.error('Ошибка обновления badge:', error);
+    }
+  }
+
+  async getTwitchTabs() {
+    try {
+      const tabs = await chrome.tabs.query({ url: 'https://www.twitch.tv/*' });
+      return tabs.map(tab => ({
+        id: tab.id,
+        title: tab.title,
+        url: tab.url,
+        active: tab.active
+      }));
+    } catch (error) {
+      console.error('Ошибка получения вкладок Twitch:', error);
+      return [];
     }
   }
 

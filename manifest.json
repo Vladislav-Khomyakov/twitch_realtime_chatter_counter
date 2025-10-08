@@ -5,7 +5,8 @@
   "description": "Подсчитывает количество уникальных пользователей в чате Twitch",
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "tabs"
   ],
   "host_permissions": [
     "https://www.twitch.tv/*"
