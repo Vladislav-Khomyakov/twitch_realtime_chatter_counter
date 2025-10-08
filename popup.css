@@ -6,7 +6,7 @@
 }
 
 body {
-  width: 320px;
+  width: 500px;
   min-height: 400px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: linear-gradient(135deg, #9146ff 0%, #6441a5 100%);
@@ -64,6 +64,113 @@ body {
   background-color: #ff4444;
 }
 
+/* Tabs Section */
+.tabs-section {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 16px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  max-height: 200px;
+  display: flex;
+  flex-direction: column;
+}
+
+.tabs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.tabs-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0;
+}
+
+.tabs-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.tabs-list {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tab-item {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tab-item:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+.tab-item.active {
+  background: rgba(0, 255, 136, 0.2);
+  border-color: rgba(0, 255, 136, 0.4);
+}
+
+.tab-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.tab-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #ffffff;
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-url {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.tab-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: #00ff88;
+}
+
+.tab-status {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.tab-status.active {
+  color: #00ff88;
+}
+
 /* Stats Section */
 .stats-section {
   background: rgba(255, 255, 255, 0.1);
@@ -71,6 +178,12 @@ body {
   padding: 20px;
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  gap: 16px;
+}
+
+.stats-section .stat-card {
+  flex: 1;
 }
 
 .stat-card {
@@ -392,18 +505,6 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* Footer */
-.footer {
-  text-align: center;
-  margin-top: auto;
-}
-
-.help-text {
-  font-size: 11px;
-  opacity: 0.7;
-  line-height: 1.4;
 }
 
 /* Notifications */

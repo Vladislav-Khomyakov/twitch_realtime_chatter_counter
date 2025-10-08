@@ -16,6 +16,20 @@
       </div>
     </div>
 
+    <div class="tabs-section" id="tabsSection">
+      <div class="tabs-header">
+        <h3>Вкладки Twitch</h3>
+        <div class="tabs-controls">
+          <button id="refreshTabsButton" class="btn-small" title="Обновить список вкладок">
+            <span class="btn-icon">🔄</span>
+          </button>
+        </div>
+      </div>
+      <div class="tabs-list" id="tabsList">
+        <!-- Вкладки будут добавлены динамически -->
+      </div>
+    </div>
+
     <div class="stats-section">
       <div class="stat-card">
         <div class="stat-number" id="userCount">0</div>
@@ -78,15 +92,9 @@
         <span class="info-value" id="currentStream">Не определен</span>
       </div>
       <div class="info-item">
-        <span class="info-label">Время работы:</span>
+        <span class="info-label">Время мониторинга:</span>
         <span class="info-value" id="sessionTime">00:00:00</span>
       </div>
-    </div>
-
-    <div class="footer">
-      <p class="help-text">
-        Откройте стрим на Twitch для начала подсчета
-      </p>
     </div>
   </div>
 
