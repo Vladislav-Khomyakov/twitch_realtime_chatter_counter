@@ -42,6 +42,11 @@ class BackgroundController {
         this.cleanupTabData(tabId);
       }
     });
+
+    // Обновляем badge при смене активной вкладки
+    chrome.tabs.onActivated.addListener(async (activeInfo) => {
+      await this.updateBadgeForActiveTab();
+    });
   }
 
   cleanupTabData(tabId) {
@@ -91,8 +96,8 @@ class BackgroundController {
       activeTabsCount: activeTabs
     });
 
-    // Обновляем badge с общим количеством
-    this.updateBadge(totalUsers);
+    // Обновляем badge с количеством пользователей активной вкладки
+    await this.updateBadgeForActiveTab();
   }
 
   async loadInitialData() {
@@ -433,6 +438,28 @@ class BackgroundController {
     } catch (error) {
       console.error('Ошибка получения статистики всех вкладок:', error);
       return { error: error.message };
+    }
+  }
+
+  async updateBadgeForActiveTab() {
+    try {
+      // Получаем активную вкладку Twitch
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      let activeTabUserCount = 0;
+      
+      if (tabs.length > 0) {
+        const activeTab = tabs[0];
+        if (activeTab.url && activeTab.url.includes('twitch.tv')) {
+          const tabData = this.getTabData(activeTab.id);
+          activeTabUserCount = tabData.userCount || 0;
+        }
+      }
+      
+      const badgeText = activeTabUserCount > 0 ? activeTabUserCount.toString() : '';
+      chrome.action.setBadgeText({ text: badgeText });
+      chrome.action.setBadgeBackgroundColor({ color: '#9146ff' }); // Twitch purple
+    } catch (error) {
+      console.error('Ошибка обновления badge для активной вкладки:', error);
     }
   }
 

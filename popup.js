@@ -13,7 +13,6 @@ class PopupController {
     this.currentTabId = null;
     this.allTabs = [];
     this.allTabsStats = {};
-    this.globalUserCount = 0;
     this.init();
   }
 
@@ -63,7 +62,7 @@ class PopupController {
 
   async loadData() {
     try {
-      // Получаем данные из storage
+      // Получаем данные из storage (для совместимости со старыми версиями)
       const result = await chrome.storage.local.get(['userCount', 'sessionStartTime', 'currentStreamer', 'usersList', 'sessionActive', 'botsList']);
       
       if (result.userCount) {
@@ -130,6 +129,21 @@ class PopupController {
           // Content script может быть не загружен
           this.updateStatus('Ожидание загрузки', 'inactive');
         }
+
+        // Получаем данные сессии из background script для текущей вкладки
+        try {
+          const sessionResponse = await chrome.runtime.sendMessage({ 
+            type: 'GET_STATS', 
+            tabId: tab.id 
+          });
+          if (sessionResponse && !sessionResponse.error) {
+            this.sessionStartTime = sessionResponse.sessionStartTime ? new Date(sessionResponse.sessionStartTime) : null;
+            this.sessionActive = sessionResponse.sessionActive || false;
+            this.updateSessionTime();
+          }
+        } catch (error) {
+          console.error('Ошибка получения данных сессии:', error);
+        }
       } else {
         this.updateStatus('Не на Twitch', 'inactive');
       }
@@ -147,16 +161,8 @@ class PopupController {
     const countElement = document.getElementById('userCount');
     countElement.textContent = this.userCount.toLocaleString();
     
-    // Обновляем глобальный счетчик
-    this.updateGlobalUserCount();
   }
 
-  updateGlobalUserCount() {
-    const globalCountElement = document.getElementById('globalUserCount');
-    if (globalCountElement) {
-      globalCountElement.textContent = this.globalUserCount.toLocaleString();
-    }
-  }
 
   updateStatus(text, status) {
     const statusText = document.querySelector('.status-text');
@@ -440,10 +446,7 @@ class PopupController {
       if (response && !response.error) {
         console.log('Popup: Получена статистика вкладок:', response);
         this.allTabsStats = response;
-        this.globalUserCount = response.global.userCount;
-        this.updateGlobalUserCount();
         this.updateTabsList();
-        this.updateGlobalStatsVisibility();
       } else {
         console.log('Popup: Ошибка получения статистики вкладок:', response);
         // Все равно обновляем список табов, даже если нет статистики
@@ -542,14 +545,6 @@ class PopupController {
     this.showNotification('Список вкладок обновлен');
   }
 
-  updateGlobalStatsVisibility() {
-    const globalStatsCard = document.getElementById('globalStatsCard');
-    if (this.allTabs.length > 1) {
-      globalStatsCard.style.display = 'block';
-    } else {
-      globalStatsCard.style.display = 'none';
-    }
-  }
 
   destroy() {
     if (this.sessionTimer) {
